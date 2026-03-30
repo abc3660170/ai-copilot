@@ -1,0 +1,14 @@
+{
+  "name": "ai-copilot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "dev:copilot": "pnpm --filter copilot dev",
+    "build:copilot": "pnpm --filter copilot build",
+    "build:web": "pnpm --filter web build",
+    "build": "pnpm --filter copilot build && pnpm --filter web build",
+    "preview:web": "pnpm --filter web preview"
+  }
+}
