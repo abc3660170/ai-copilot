@@ -83,11 +83,11 @@ const waveConfigs: WaveConfig[] = [
     width: 0.5, opacity: 0.85,
   },
   {
-    // 波 3：淡紫白 —— 反向流动，慢速
+    // 波 3：群青色 —— 反向流动，慢速
     amplitude: 0.3, frequency: 0.85, phaseSpeed: 0.65, phaseOffset: Math.PI * 1.35,
     direction: -1,
-    colorR: 170, colorG: 130, colorB: 255,
-    glowR: 200, glowG: 170, glowB: 255,
+    colorR: 30, colorG: 70, colorB: 200,
+    glowR: 60, glowG: 100, glowB: 240,
     errR: 255, errG: 80, errB: 80,
     width: 0.35, opacity: 0.55,
   },
@@ -151,8 +151,8 @@ function draw(ctx: CanvasRenderingContext2D, w: number, h: number, time: number)
   // ==== 5. 玻璃球壳 ====
   drawGlass(ctx, cx, cy, br, t, errMix)
 
-  // ==== 6. 卫星光点 ====
-  drawSatellites(ctx, cx, cy, br, t)
+  // ==== 6. 卫星光点（仅 thinking / streaming 状态） ====
+  drawSatellites(ctx, cx, cy, br, t, props.status)
 }
 
 function drawWave(
@@ -412,18 +412,26 @@ function drawGlass(
     ctx.fill()
   }
 
+  // 颜色过渡：error 状态变红
+  const eR = Math.round(100 + 60 * errMix)   // 100→160
+  const eG = Math.round(150 - 80 * errMix)    // 150→70
+  const eB = Math.round(240 - 160 * errMix)   // 240→80
+  const eR2 = Math.round(180 + 75 * errMix)   // 180→255
+  const eG2 = Math.round(215 - 130 * errMix)  // 215→85
+  const eB2 = Math.round(255 - 175 * errMix)  // 255→80
+
   // ---- 3. 菲涅尔边缘光（更强，4层叠加） ----
   for (let layer = 0; layer < 4; layer++) {
     const innerR = r * (0.65 + layer * 0.07)
     const outerR = r * (1.0 + layer * 0.004)
     const alpha = [0.45, 0.3, 0.18, 0.08][layer]
     const edgeGrad = ctx.createRadialGradient(cx, cy, innerR, cx, cy, outerR)
-    edgeGrad.addColorStop(0, 'rgba(100, 150, 240, 0)')
-    edgeGrad.addColorStop(0.4, `rgba(110, 160, 245, ${alpha * 0.08})`)
-    edgeGrad.addColorStop(0.7, `rgba(130, 180, 255, ${alpha * 0.35})`)
-    edgeGrad.addColorStop(0.88, `rgba(160, 200, 255, ${alpha * 0.8})`)
-    edgeGrad.addColorStop(0.96, `rgba(180, 215, 255, ${alpha})`)
-    edgeGrad.addColorStop(1, `rgba(190, 220, 255, ${alpha * 0.5})`)
+    edgeGrad.addColorStop(0, `rgba(${eR}, ${eG}, ${eB}, 0)`)
+    edgeGrad.addColorStop(0.4, `rgba(${eR}, ${eG}, ${eB}, ${alpha * 0.08})`)
+    edgeGrad.addColorStop(0.7, `rgba(${eR + 30}, ${eG + 30}, ${Math.min(255, eB + 15)}, ${alpha * 0.35})`)
+    edgeGrad.addColorStop(0.88, `rgba(${eR2 - 20}, ${eG2}, ${Math.min(255, eB2)}, ${alpha * 0.8})`)
+    edgeGrad.addColorStop(0.96, `rgba(${eR2}, ${eG2}, ${Math.min(255, eB2)}, ${alpha})`)
+    edgeGrad.addColorStop(1, `rgba(${eR2}, ${Math.min(255, eG2 + 5)}, ${Math.min(255, eB2)}, ${alpha * 0.5})`)
     ctx.fillStyle = edgeGrad
     ctx.beginPath()
     ctx.arc(cx, cy, outerR, 0, Math.PI * 2)
@@ -434,17 +442,17 @@ function drawGlass(
   const edgeA = 0.35 + 0.08 * Math.sin(t * 1.5)
   ctx.beginPath()
   ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.strokeStyle = `rgba(150, 185, 250, ${edgeA})`
+  ctx.strokeStyle = `rgba(${eR2 - 30}, ${eG2 - 30}, ${Math.min(255, eB2)}, ${edgeA})`
   ctx.lineWidth = 1.4
   ctx.stroke()
 
   // 外发光描边
   ctx.save()
   ctx.shadowBlur = r * 0.12
-  ctx.shadowColor = `rgba(110, 150, 240, ${edgeA * 0.5})`
+  ctx.shadowColor = `rgba(${eR}, ${eG}, ${eB}, ${edgeA * 0.5})`
   ctx.beginPath()
   ctx.arc(cx, cy, r + 1.5, 0, Math.PI * 2)
-  ctx.strokeStyle = `rgba(110, 150, 240, ${edgeA * 0.2})`
+  ctx.strokeStyle = `rgba(${eR}, ${eG}, ${eB}, ${edgeA * 0.2})`
   ctx.lineWidth = 2.5
   ctx.stroke()
   ctx.restore()
@@ -551,11 +559,11 @@ function drawGlass(
 
     ctx.globalAlpha = 0.09 + 0.03 * Math.sin(t * 0.8)
     const arcGrad = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy - r * 0.3)
-    arcGrad.addColorStop(0, 'rgba(180, 200, 255, 0)')
-    arcGrad.addColorStop(0.25, 'rgba(200, 215, 255, 0.4)')
-    arcGrad.addColorStop(0.5, 'rgba(220, 230, 255, 0.9)')
-    arcGrad.addColorStop(0.75, 'rgba(200, 215, 255, 0.4)')
-    arcGrad.addColorStop(1, 'rgba(180, 200, 255, 0)')
+    arcGrad.addColorStop(0, `rgba(${eR2}, ${eG2}, ${Math.min(255, eB2)}, 0)`)
+    arcGrad.addColorStop(0.25, `rgba(${eR2}, ${eG2}, ${Math.min(255, eB2)}, 0.4)`)
+    arcGrad.addColorStop(0.5, `rgba(${Math.min(255, eR2 + 40)}, ${Math.min(255, eG2 + 15)}, ${Math.min(255, eB2)}, 0.9)`)
+    arcGrad.addColorStop(0.75, `rgba(${eR2}, ${eG2}, ${Math.min(255, eB2)}, 0.4)`)
+    arcGrad.addColorStop(1, `rgba(${eR2}, ${eG2}, ${Math.min(255, eB2)}, 0)`)
 
     ctx.strokeStyle = arcGrad
     ctx.lineWidth = r * 0.05
@@ -584,10 +592,16 @@ const SATELLITES = [
 function drawSatellites(
   ctx: CanvasRenderingContext2D,
   cx: number, cy: number, r: number,
-  t: number,
+  t: number, status: CopilotStatus,
 ) {
+  // idle 和 error 状态不显示卫星
+  if (status === 'idle' || status === 'error') return
+
+  // streaming 比 thinking 稍快
+  const speedMul = status === 'streaming' ? 1.35 : 1.0
+
   for (const sat of SATELLITES) {
-    const angle = t * sat.speed + sat.phase
+    const angle = t * sat.speed * speedMul + sat.phase
     const orbitR = r * sat.orbitRadius
 
     // 3D 投影：圆形轨道绕一个倾斜轴
