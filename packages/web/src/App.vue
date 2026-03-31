@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { CopilotCore, CopilotPanel } from 'copilot'
-import type { CopilotConfig } from 'copilot'
+import { CopilotCore, CopilotPanel, SiriOrb } from 'copilot'
+import type { CopilotConfig, CopilotStatus } from 'copilot'
 
 const config = reactive<CopilotConfig>({
   llm: {
@@ -16,6 +16,9 @@ const config = reactive<CopilotConfig>({
 
 const copilot = new CopilotCore(config)
 const panelOpen = ref(true)
+
+// 调试 SiriOrb 状态
+const debugStatus = ref<CopilotStatus>('idle')
 
 function handleConfigSave() {
   copilot.updateConfig(config)
@@ -101,6 +104,38 @@ function handleConfigSave() {
           <li>支持流式响应（SSE）</li>
           <li>可以通过 <code>Shift+Enter</code> 换行</li>
         </ul>
+      </div>
+
+      <div class="config-card debug-orb-card">
+        <h2>🔮 SiriOrb 动画调试</h2>
+        <div class="debug-orb-area">
+          <SiriOrb :status="debugStatus" :size="100" />
+        </div>
+        <div class="debug-status-label">
+          当前状态: <strong>{{ debugStatus }}</strong>
+        </div>
+        <div class="debug-btn-group">
+          <button
+            class="debug-btn idle"
+            :class="{ active: debugStatus === 'idle' }"
+            @click="debugStatus = 'idle'"
+          >💤 Idle</button>
+          <button
+            class="debug-btn thinking"
+            :class="{ active: debugStatus === 'thinking' }"
+            @click="debugStatus = 'thinking'"
+          >🤔 Thinking</button>
+          <button
+            class="debug-btn streaming"
+            :class="{ active: debugStatus === 'streaming' }"
+            @click="debugStatus = 'streaming'"
+          >⚡ Streaming</button>
+          <button
+            class="debug-btn error"
+            :class="{ active: debugStatus === 'error' }"
+            @click="debugStatus = 'error'"
+          >❌ Error</button>
+        </div>
       </div>
     </div>
 
@@ -247,5 +282,92 @@ h1 {
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 12px;
+}
+
+/* SiriOrb 调试区域 */
+.debug-orb-card {
+  text-align: center;
+}
+
+.debug-orb-area {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 0;
+  background: radial-gradient(circle, #1a1228 0%, #0d0a15 100%);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.debug-status-label {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 16px;
+}
+
+.debug-status-label strong {
+  color: #8b5cf6;
+  text-transform: uppercase;
+}
+
+.debug-btn-group {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.debug-btn {
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.debug-btn.idle {
+  background: #f0f1ff;
+  color: #6366f1;
+}
+.debug-btn.idle.active,
+.debug-btn.idle:hover {
+  background: #6366f1;
+  color: white;
+  border-color: #4f46e5;
+}
+
+.debug-btn.thinking {
+  background: #fff7ed;
+  color: #f59e0b;
+}
+.debug-btn.thinking.active,
+.debug-btn.thinking:hover {
+  background: #f59e0b;
+  color: white;
+  border-color: #d97706;
+}
+
+.debug-btn.streaming {
+  background: #f0fdf4;
+  color: #10b981;
+}
+.debug-btn.streaming.active,
+.debug-btn.streaming:hover {
+  background: #10b981;
+  color: white;
+  border-color: #059669;
+}
+
+.debug-btn.error {
+  background: #fef2f2;
+  color: #ef4444;
+}
+.debug-btn.error.active,
+.debug-btn.error:hover {
+  background: #ef4444;
+  color: white;
+  border-color: #dc2626;
 }
 </style>

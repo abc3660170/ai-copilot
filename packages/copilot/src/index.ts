@@ -2,6 +2,7 @@ export { CopilotCore } from './core'
 export { default as CopilotPanel } from './components/CopilotPanel.vue'
 export { default as MessageBubble } from './components/MessageBubble.vue'
 export { default as CopilotInput } from './components/CopilotInput.vue'
+export { default as SiriOrb } from './components/SiriOrb.vue'
 
 export type {
   Message,
