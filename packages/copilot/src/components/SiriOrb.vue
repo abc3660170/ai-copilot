@@ -382,10 +382,27 @@ function drawGlass(
   cx: number, cy: number, r: number,
   t: number, errMix: number,
 ) {
-  // ---- 1. 球体明暗底色（上亮下暗，核心立体感来源） ----
+  // 颜色过渡：error 状态变红
+  const eR = Math.round(100 + 60 * errMix)   // 100→160
+  const eG = Math.round(150 - 80 * errMix)    // 150→70
+  const eB = Math.round(240 - 160 * errMix)   // 240→80
+  const eR2 = Math.round(180 + 75 * errMix)   // 180→255
+  const eG2 = Math.round(215 - 130 * errMix)  // 215→85
+  const eB2 = Math.round(255 - 175 * errMix)  // 255→80
+
+  // 光源旋转角度（匀速）
+  const rotAngle = t * 0.4
+  const cosRot = Math.cos(rotAngle)
+  const sinRot = Math.sin(rotAngle)
+
+  // ---- 1. 球体明暗底色（随光源旋转） ----
   {
-    // 从左上到右下的线性渐变，模拟顶光照射
-    const lightGrad = ctx.createLinearGradient(cx - r * 0.5, cy - r, cx + r * 0.3, cy + r)
+    const lx = -0.5 * cosRot + 0.5 * sinRot   // 光源方向（左上偏移旋转）
+    const ly = -0.5 * sinRot - 0.5 * cosRot
+    const lightGrad = ctx.createLinearGradient(
+      cx + r * lx, cy + r * ly,
+      cx - r * lx * 0.6, cy - r * ly * 0.6,
+    )
     lightGrad.addColorStop(0, 'rgba(60, 55, 110, 0.15)')
     lightGrad.addColorStop(0.35, 'rgba(30, 25, 70, 0.08)')
     lightGrad.addColorStop(0.65, 'rgba(12, 10, 40, 0.2)')
@@ -396,11 +413,13 @@ function drawGlass(
     ctx.fill()
   }
 
-  // ---- 2. 内部环境反射（偏心径向，增加深度感） ----
+  // ---- 2. 内部环境反射（偏心径向，随光源旋转） ----
   {
+    const envOx = -0.2 * cosRot + 0.15 * sinRot
+    const envOy = -0.2 * sinRot - 0.15 * cosRot
     const envGrad = ctx.createRadialGradient(
-      cx - r * 0.2, cy - r * 0.15, r * 0.02,
-      cx + r * 0.05, cy + r * 0.05, r,
+      cx + r * envOx, cy + r * envOy, r * 0.02,
+      cx + r * 0.05 * cosRot, cy + r * 0.05 * sinRot, r,
     )
     envGrad.addColorStop(0, 'rgba(50, 45, 100, 0.06)')
     envGrad.addColorStop(0.3, 'rgba(25, 22, 60, 0.03)')
@@ -411,14 +430,6 @@ function drawGlass(
     ctx.arc(cx, cy, r, 0, Math.PI * 2)
     ctx.fill()
   }
-
-  // 颜色过渡：error 状态变红
-  const eR = Math.round(100 + 60 * errMix)   // 100→160
-  const eG = Math.round(150 - 80 * errMix)    // 150→70
-  const eB = Math.round(240 - 160 * errMix)   // 240→80
-  const eR2 = Math.round(180 + 75 * errMix)   // 180→255
-  const eG2 = Math.round(215 - 130 * errMix)  // 215→85
-  const eB2 = Math.round(255 - 175 * errMix)  // 255→80
 
   // ---- 3. 菲涅尔边缘光（更强，4层叠加） ----
   for (let layer = 0; layer < 4; layer++) {
@@ -438,29 +449,54 @@ function drawGlass(
     ctx.fill()
   }
 
-  // ---- 4. 球壳描边（双层） ----
-  const edgeA = 0.35 + 0.08 * Math.sin(t * 1.5)
-  ctx.beginPath()
-  ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.strokeStyle = `rgba(${eR2 - 30}, ${eG2 - 30}, ${Math.min(255, eB2)}, ${edgeA})`
-  ctx.lineWidth = 1.4
-  ctx.stroke()
-
-  // 外发光描边
-  ctx.save()
-  ctx.shadowBlur = r * 0.12
-  ctx.shadowColor = `rgba(${eR}, ${eG}, ${eB}, ${edgeA * 0.5})`
-  ctx.beginPath()
-  ctx.arc(cx, cy, r + 1.5, 0, Math.PI * 2)
-  ctx.strokeStyle = `rgba(${eR}, ${eG}, ${eB}, ${edgeA * 0.2})`
-  ctx.lineWidth = 2.5
-  ctx.stroke()
-  ctx.restore()
-
-  // ---- 5. 主高光（左上，椭圆，更亮更锐利） ----
+  // ---- 4. 球壳描边（旋转半透明，一半透明一半渐变） ----
   {
-    const hlCx = cx - r * 0.26
-    const hlCy = cy - r * 0.28
+    const baseEdgeA = 0.35 + 0.08 * Math.sin(t * 1.5)
+    const segments = 72
+    const step = (Math.PI * 2) / segments
+
+    // 内描边：分段绘制，每段根据与光源方向的夹角决定alpha
+    ctx.lineWidth = 1.6
+    for (let i = 0; i < segments; i++) {
+      const a0 = i * step
+      const a1 = a0 + step + 0.02 // 微小重叠避免缝隙
+      const mid = a0 + step * 0.5
+      // cos(mid - rotAngle): 光源正面=1，背面=-1
+      const facing = Math.cos(mid - rotAngle)
+      // 背面半圈完全透明(facing<0)，正面半圈从0渐变到最亮
+      const segAlpha = facing > 0 ? baseEdgeA * facing * facing : 0
+      if (segAlpha < 0.005) continue
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, a0, a1)
+      ctx.strokeStyle = `rgba(${eR2 - 30}, ${eG2 - 30}, ${Math.min(255, eB2)}, ${segAlpha})`
+      ctx.stroke()
+    }
+
+    // 外发光描边（同样分段旋转）
+    ctx.save()
+    ctx.lineWidth = 2.5
+    for (let i = 0; i < segments; i++) {
+      const a0 = i * step
+      const a1 = a0 + step + 0.02
+      const mid = a0 + step * 0.5
+      const facing = Math.cos(mid - rotAngle)
+      const segAlpha = facing > 0 ? baseEdgeA * 0.25 * facing : 0
+      if (segAlpha < 0.003) continue
+      ctx.shadowBlur = r * 0.12 * Math.max(0, facing)
+      ctx.shadowColor = `rgba(${eR}, ${eG}, ${eB}, ${segAlpha * 1.5})`
+      ctx.beginPath()
+      ctx.arc(cx, cy, r + 1.5, a0, a1)
+      ctx.strokeStyle = `rgba(${eR}, ${eG}, ${eB}, ${segAlpha})`
+      ctx.stroke()
+    }
+    ctx.restore()
+  }
+
+  // ---- 5. 主高光（随光源旋转） ----
+  {
+    // 高光位置跟随光源方向（距中心偏移0.38r的方向）
+    const hlCx = cx + r * 0.38 * Math.cos(rotAngle + Math.PI + 0.3)
+    const hlCy = cy + r * 0.38 * Math.sin(rotAngle + Math.PI + 0.3)
     ctx.save()
     ctx.beginPath()
     ctx.arc(cx, cy, r, 0, Math.PI * 2)
@@ -469,7 +505,7 @@ function drawGlass(
     // 大范围柔和光
     ctx.save()
     ctx.translate(hlCx, hlCy)
-    ctx.rotate(-0.45)
+    ctx.rotate(rotAngle - 0.45)
     ctx.scale(1, 0.55)
     const hlSoftGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 0.5)
     hlSoftGrad.addColorStop(0, 'rgba(255, 255, 255, 0.35)')
@@ -482,8 +518,8 @@ function drawGlass(
 
     // 锐利核心光斑
     ctx.save()
-    ctx.translate(hlCx + r * 0.02, hlCy + r * 0.02)
-    ctx.rotate(-0.5)
+    ctx.translate(hlCx + r * 0.02 * cosRot, hlCy + r * 0.02 * sinRot)
+    ctx.rotate(rotAngle - 0.5)
     ctx.scale(1, 0.45)
     const hlSharpGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 0.18)
     hlSharpGrad.addColorStop(0, 'rgba(255, 255, 255, 0.9)')
@@ -497,10 +533,11 @@ function drawGlass(
     ctx.restore()
   }
 
-  // ---- 6. 副高光（右下小光点，更亮） ----
+  // ---- 6. 副高光（与主高光对侧，随旋转） ----
   {
-    const hl2X = cx + r * 0.33
-    const hl2Y = cy + r * 0.26
+    // 副高光在光源对侧偏移
+    const hl2X = cx + r * 0.36 * Math.cos(rotAngle + 0.5)
+    const hl2Y = cy + r * 0.36 * Math.sin(rotAngle + 0.5)
     const hl2Grad = ctx.createRadialGradient(hl2X, hl2Y, 0, hl2X, hl2Y, r * 0.09)
     hl2Grad.addColorStop(0, 'rgba(240, 245, 255, 0.65)')
     hl2Grad.addColorStop(0.3, 'rgba(220, 230, 255, 0.3)')
@@ -512,9 +549,15 @@ function drawGlass(
     ctx.fill()
   }
 
-  // ---- 7. 下半部暗影加深（增强球体体积感） ----
+  // ---- 7. 暗影加深（光源背面，随旋转） ----
   {
-    const shadowGrad = ctx.createLinearGradient(cx, cy, cx, cy + r)
+    // 阴影方向与光源相反
+    const shX = Math.cos(rotAngle) * 0.5
+    const shY = Math.sin(rotAngle) * 0.5
+    const shadowGrad = ctx.createLinearGradient(
+      cx - r * shX, cy - r * shY,
+      cx + r * shX, cy + r * shY,
+    )
     shadowGrad.addColorStop(0, 'rgba(5, 3, 20, 0)')
     shadowGrad.addColorStop(0.3, 'rgba(5, 3, 20, 0.05)')
     shadowGrad.addColorStop(0.7, 'rgba(5, 3, 20, 0.15)')
@@ -525,9 +568,15 @@ function drawGlass(
     ctx.fill()
   }
 
-  // ---- 8. 下半部反射光（品红/青色淡反射） ----
+  // ---- 8. 对侧反射光（品红，随旋转） ----
   {
-    const btGrad = ctx.createRadialGradient(cx + r * 0.05, cy + r * 0.45, 0, cx, cy + r * 0.4, r * 0.5)
+    // 反射在光源对面
+    const btOx = Math.cos(rotAngle) * 0.45
+    const btOy = Math.sin(rotAngle) * 0.45
+    const btGrad = ctx.createRadialGradient(
+      cx + r * btOx * 0.1, cy + r * btOy, 0,
+      cx + r * btOx * 0.05, cy + r * btOy * 0.9, r * 0.5,
+    )
     const btC = errMix > 0.5 ? '255, 70, 40' : '180, 50, 180'
     btGrad.addColorStop(0, `rgba(${btC}, 0.15)`)
     btGrad.addColorStop(0.4, `rgba(${btC}, 0.05)`)
@@ -538,9 +587,14 @@ function drawGlass(
     ctx.fill()
   }
 
-  // ---- 9. 底部环境光反射（淡青） ----
+  // ---- 9. 环境光反射（淡青，随旋转） ----
   {
-    const btGrad2 = ctx.createRadialGradient(cx - r * 0.1, cy + r * 0.35, 0, cx, cy + r * 0.3, r * 0.35)
+    const envOx2 = Math.cos(rotAngle + Math.PI * 0.7) * 0.35
+    const envOy2 = Math.sin(rotAngle + Math.PI * 0.7) * 0.35
+    const btGrad2 = ctx.createRadialGradient(
+      cx + r * envOx2 - r * 0.1, cy + r * envOy2, 0,
+      cx + r * envOx2 * 0.5, cy + r * envOy2 * 0.8, r * 0.35,
+    )
     btGrad2.addColorStop(0, 'rgba(60, 140, 220, 0.1)')
     btGrad2.addColorStop(0.5, 'rgba(60, 120, 200, 0.04)')
     btGrad2.addColorStop(1, 'rgba(60, 120, 200, 0)')
@@ -550,15 +604,24 @@ function drawGlass(
     ctx.fill()
   }
 
-  // ---- 10. 上部弧形反光（模拟环境光映射） ----
+  // ---- 10. 弧形反光（随旋转） ----
   {
     ctx.save()
     ctx.beginPath()
     ctx.arc(cx, cy, r, 0, Math.PI * 2)
     ctx.clip()
 
+    // 主弧：在光源方向附近
+    const arcStart = rotAngle + Math.PI - 0.82
+    const arcEnd = rotAngle + Math.PI + 0.82
     ctx.globalAlpha = 0.09 + 0.03 * Math.sin(t * 0.8)
-    const arcGrad = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy - r * 0.3)
+
+    // 使用角度方向的线性渐变
+    const ag1x = cx + r * Math.cos(arcStart)
+    const ag1y = cy + r * Math.sin(arcStart)
+    const ag2x = cx + r * Math.cos(arcEnd)
+    const ag2y = cy + r * Math.sin(arcEnd)
+    const arcGrad = ctx.createLinearGradient(ag1x, ag1y, ag2x, ag2y)
     arcGrad.addColorStop(0, `rgba(${eR2}, ${eG2}, ${Math.min(255, eB2)}, 0)`)
     arcGrad.addColorStop(0.25, `rgba(${eR2}, ${eG2}, ${Math.min(255, eB2)}, 0.4)`)
     arcGrad.addColorStop(0.5, `rgba(${Math.min(255, eR2 + 40)}, ${Math.min(255, eG2 + 15)}, ${Math.min(255, eB2)}, 0.9)`)
@@ -568,14 +631,14 @@ function drawGlass(
     ctx.strokeStyle = arcGrad
     ctx.lineWidth = r * 0.05
     ctx.beginPath()
-    ctx.arc(cx, cy, r * 0.88, -Math.PI * 0.82, -Math.PI * 0.18)
+    ctx.arc(cx, cy, r * 0.88, arcStart + 0.14, arcEnd - 0.14)
     ctx.stroke()
 
-    // 第二条弧（更细更淡，下方）
+    // 第二条弧（更细更淡）
     ctx.globalAlpha = 0.04 + 0.015 * Math.sin(t * 0.6 + 1)
     ctx.lineWidth = r * 0.03
     ctx.beginPath()
-    ctx.arc(cx, cy, r * 0.78, -Math.PI * 0.7, -Math.PI * 0.3)
+    ctx.arc(cx, cy, r * 0.78, arcStart + 0.3, arcEnd - 0.3)
     ctx.stroke()
 
     ctx.restore()
