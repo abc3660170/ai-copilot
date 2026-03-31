@@ -377,6 +377,8 @@ function drawCrossGlow(
   }
 }
 
+let _fresnelOffCvs: HTMLCanvasElement | null = null
+
 function drawGlass(
   ctx: CanvasRenderingContext2D,
   cx: number, cy: number, r: number,
@@ -431,65 +433,80 @@ function drawGlass(
     ctx.fill()
   }
 
-  // ---- 3. 菲涅尔边缘光（更强，4层叠加） ----
-  for (let layer = 0; layer < 4; layer++) {
-    const innerR = r * (0.65 + layer * 0.07)
-    const outerR = r * (1.0 + layer * 0.004)
-    const alpha = [0.45, 0.3, 0.18, 0.08][layer]
-    const edgeGrad = ctx.createRadialGradient(cx, cy, innerR, cx, cy, outerR)
-    edgeGrad.addColorStop(0, `rgba(${eR}, ${eG}, ${eB}, 0)`)
-    edgeGrad.addColorStop(0.4, `rgba(${eR}, ${eG}, ${eB}, ${alpha * 0.08})`)
-    edgeGrad.addColorStop(0.7, `rgba(${eR + 30}, ${eG + 30}, ${Math.min(255, eB + 15)}, ${alpha * 0.35})`)
-    edgeGrad.addColorStop(0.88, `rgba(${eR2 - 20}, ${eG2}, ${Math.min(255, eB2)}, ${alpha * 0.8})`)
-    edgeGrad.addColorStop(0.96, `rgba(${eR2}, ${eG2}, ${Math.min(255, eB2)}, ${alpha})`)
-    edgeGrad.addColorStop(1, `rgba(${eR2}, ${Math.min(255, eG2 + 5)}, ${Math.min(255, eB2)}, ${alpha * 0.5})`)
-    ctx.fillStyle = edgeGrad
-    ctx.beginPath()
-    ctx.arc(cx, cy, outerR, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
-  // ---- 4. 球壳描边（旋转半透明，一半透明一半渐变） ----
+  // ---- 3 & 4. 菲涅尔边缘光 + 球壳描边（离屏绘制 + 旋转渐变遮罩，完全连续） ----
   {
+    // 离屏 canvas 尺寸只需覆盖球体区域（含外溢）
+    const pad = r * 0.15
+    const offW = Math.ceil((r + pad) * 2)
+    const offH = offW
+    const offCx = offW / 2
+    const offCy = offH / 2
+
+    // 复用离屏 canvas 避免每帧创建
+    if (!_fresnelOffCvs || _fresnelOffCvs.width !== offW) {
+      _fresnelOffCvs = document.createElement('canvas')
+      _fresnelOffCvs.width = offW
+      _fresnelOffCvs.height = offH
+    }
+    const off = _fresnelOffCvs.getContext('2d')!
+    off.clearRect(0, 0, offW, offH)
+
+    // 在离屏上绘制完整一圈菲涅尔边缘光
+    for (let layer = 0; layer < 4; layer++) {
+      const innerR = r * (0.65 + layer * 0.07)
+      const outerR = r * (1.0 + layer * 0.004)
+      const alpha = [0.45, 0.3, 0.18, 0.08][layer]
+      const edgeGrad = off.createRadialGradient(offCx, offCy, innerR, offCx, offCy, outerR)
+      edgeGrad.addColorStop(0, `rgba(${eR}, ${eG}, ${eB}, 0)`)
+      edgeGrad.addColorStop(0.4, `rgba(${eR}, ${eG}, ${eB}, ${alpha * 0.08})`)
+      edgeGrad.addColorStop(0.7, `rgba(${eR + 30}, ${eG + 30}, ${Math.min(255, eB + 15)}, ${alpha * 0.35})`)
+      edgeGrad.addColorStop(0.88, `rgba(${eR2 - 20}, ${eG2}, ${Math.min(255, eB2)}, ${alpha * 0.8})`)
+      edgeGrad.addColorStop(0.96, `rgba(${eR2}, ${eG2}, ${Math.min(255, eB2)}, ${alpha})`)
+      edgeGrad.addColorStop(1, `rgba(${eR2}, ${Math.min(255, eG2 + 5)}, ${Math.min(255, eB2)}, ${alpha * 0.5})`)
+      off.fillStyle = edgeGrad
+      off.beginPath()
+      off.arc(offCx, offCy, outerR, 0, Math.PI * 2)
+      off.fill()
+    }
+
+    // 在离屏上绘制球壳描边
     const baseEdgeA = 0.35 + 0.08 * Math.sin(t * 1.5)
-    const segments = 72
-    const step = (Math.PI * 2) / segments
+    off.beginPath()
+    off.arc(offCx, offCy, r, 0, Math.PI * 2)
+    off.strokeStyle = `rgba(${eR2 - 30}, ${eG2 - 30}, ${Math.min(255, eB2)}, ${baseEdgeA})`
+    off.lineWidth = 1.6
+    off.stroke()
 
-    // 内描边：分段绘制，每段根据与光源方向的夹角决定alpha
-    ctx.lineWidth = 1.6
-    for (let i = 0; i < segments; i++) {
-      const a0 = i * step
-      const a1 = a0 + step + 0.02 // 微小重叠避免缝隙
-      const mid = a0 + step * 0.5
-      // cos(mid - rotAngle): 光源正面=1，背面=-1
-      const facing = Math.cos(mid - rotAngle)
-      // 背面半圈完全透明(facing<0)，正面半圈从0渐变到最亮
-      const segAlpha = facing > 0 ? baseEdgeA * facing * facing : 0
-      if (segAlpha < 0.005) continue
-      ctx.beginPath()
-      ctx.arc(cx, cy, r, a0, a1)
-      ctx.strokeStyle = `rgba(${eR2 - 30}, ${eG2 - 30}, ${Math.min(255, eB2)}, ${segAlpha})`
-      ctx.stroke()
-    }
+    // 外发光描边
+    off.shadowBlur = r * 0.12
+    off.shadowColor = `rgba(${eR}, ${eG}, ${eB}, ${baseEdgeA * 0.5})`
+    off.beginPath()
+    off.arc(offCx, offCy, r + 1.5, 0, Math.PI * 2)
+    off.strokeStyle = `rgba(${eR}, ${eG}, ${eB}, ${baseEdgeA * 0.2})`
+    off.lineWidth = 2.5
+    off.stroke()
+    off.shadowBlur = 0
+    off.shadowColor = 'transparent'
 
-    // 外发光描边（同样分段旋转）
-    ctx.save()
-    ctx.lineWidth = 2.5
-    for (let i = 0; i < segments; i++) {
-      const a0 = i * step
-      const a1 = a0 + step + 0.02
-      const mid = a0 + step * 0.5
-      const facing = Math.cos(mid - rotAngle)
-      const segAlpha = facing > 0 ? baseEdgeA * 0.25 * facing : 0
-      if (segAlpha < 0.003) continue
-      ctx.shadowBlur = r * 0.12 * Math.max(0, facing)
-      ctx.shadowColor = `rgba(${eR}, ${eG}, ${eB}, ${segAlpha * 1.5})`
-      ctx.beginPath()
-      ctx.arc(cx, cy, r + 1.5, a0, a1)
-      ctx.strokeStyle = `rgba(${eR}, ${eG}, ${eB}, ${segAlpha})`
-      ctx.stroke()
-    }
-    ctx.restore()
+    // 用 destination-in 叠加旋转线性渐变作为 alpha 遮罩
+    // 渐变方向：从光源背面（全透明）到光源正面（不透明）
+    off.globalCompositeOperation = 'destination-in'
+    const maskGrad = off.createLinearGradient(
+      offCx + (r + pad) * cosRot, offCy + (r + pad) * sinRot,   // 光源正面方向（不透明端）
+      offCx - (r + pad) * cosRot, offCy - (r + pad) * sinRot,   // 光源背面方向（透明端）
+    )
+    // 正面完全不透明 → 中间过渡 → 背面完全透明
+    maskGrad.addColorStop(0, 'rgba(255,255,255,1)')
+    maskGrad.addColorStop(0.35, 'rgba(255,255,255,0.8)')
+    maskGrad.addColorStop(0.5, 'rgba(255,255,255,0.25)')
+    maskGrad.addColorStop(0.65, 'rgba(255,255,255,0.03)')
+    maskGrad.addColorStop(0.75, 'rgba(255,255,255,0)')
+    off.fillStyle = maskGrad
+    off.fillRect(0, 0, offW, offH)
+    off.globalCompositeOperation = 'source-over'
+
+    // 将离屏结果绘制到主 canvas
+    ctx.drawImage(_fresnelOffCvs!, cx - offCx, cy - offCy)
   }
 
   // ---- 5. 主高光（随光源旋转） ----
