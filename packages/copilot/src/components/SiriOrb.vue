@@ -15,7 +15,8 @@ const props = withDefaults(
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 let animationId = 0
-let startTime = 0
+let lastFrameTime = 0
+let accumulatedTime = 0
 let currentSpeed = 1.0
 let currentErrorMix = 0.0
 
@@ -53,6 +54,8 @@ interface WaveConfig {
   frequency: number
   phaseSpeed: number
   phaseOffset: number
+  /** 流向：1 正向，-1 反向，0 表示中途反转 */
+  direction: number
   colorR: number; colorG: number; colorB: number
   glowR: number; glowG: number; glowB: number
   errR: number; errG: number; errB: number
@@ -62,24 +65,27 @@ interface WaveConfig {
 
 const waveConfigs: WaveConfig[] = [
   {
-    // 波 1：品红/粉紫 —— 主波
-    amplitude: 0.6, frequency: 0.9, phaseSpeed: 0.8, phaseOffset: 0,
+    // 波 1：品红/粉紫 —— 主波，正向流动
+    amplitude: 0.42, frequency: 0.9, phaseSpeed: 0.8, phaseOffset: 0,
+    direction: 1,
     colorR: 220, colorG: 50, colorB: 220,
     glowR: 255, glowG: 100, glowB: 255,
     errR: 220, errG: 60, errB: 50,
     width: 0.6, opacity: 0.92,
   },
   {
-    // 波 2：青蓝 —— 不对称偏移，非均分
-    amplitude: 0.55, frequency: 1.05, phaseSpeed: 0.7, phaseOffset: Math.PI * 0.65,
+    // 波 2：青蓝 —— 反向流动
+    amplitude: 0.38, frequency: 1.05, phaseSpeed: 0.7, phaseOffset: Math.PI * 0.65,
+    direction: -1,
     colorR: 50, colorG: 190, colorB: 255,
     glowR: 100, glowG: 220, glowB: 255,
     errR: 255, errG: 120, errB: 50,
     width: 0.5, opacity: 0.85,
   },
   {
-    // 波 3：淡紫白 —— 辅助
-    amplitude: 0.42, frequency: 1.15, phaseSpeed: 0.9, phaseOffset: Math.PI * 1.35,
+    // 波 3：淡紫白 —— 反向流动，慢速
+    amplitude: 0.3, frequency: 0.85, phaseSpeed: 0.65, phaseOffset: Math.PI * 1.35,
+    direction: -1,
     colorR: 170, colorG: 130, colorB: 255,
     glowR: 200, glowG: 170, glowB: 255,
     errR: 255, errG: 80, errB: 80,
@@ -89,8 +95,7 @@ const waveConfigs: WaveConfig[] = [
 
 // ---- 绘制 ----
 function draw(ctx: CanvasRenderingContext2D, w: number, h: number, time: number) {
-  const speed = currentSpeed
-  const t = time * speed
+  const t = time // 已经是累积加速后的时间
   const cx = w / 2
   const cy = h / 2
   const r = props.size / 2
@@ -180,23 +185,48 @@ function drawWave(
 
     const circleHalf = Math.sqrt(1 - dx * dx) * r
 
-    // ==== 核心改动：振幅沿 x 轴变化，不是固定高度 ====
-    // 用多个不同频率的 sin 叠加做振幅调制（包络线）
+    // ==== 边缘归零：丝带入口/出口中心一定在 Y 轴垂直居中 ====
+    // smoothstep 让 |dx| 在 0.7~1.0 区间平滑归零
+    const edgeClamp = dx * dx // 0 at center, 1 at edge
+    const edgeZero = edgeClamp < 0.49 ? 1.0
+      : edgeClamp > 0.95 ? 0.0
+      : (0.95 - edgeClamp) / (0.95 - 0.49) // linear 0.7~0.975 range in |dx|
+    const edgeZeroSmooth = edgeZero * edgeZero * (3 - 2 * edgeZero) // smoothstep
+
+    // 振幅包络（中间变化丰富，两端归零）
     const ampEnvelope = 0.5
       + 0.3 * Math.sin(dx * Math.PI * 0.7 + wc.phaseOffset * 0.3 + t * 0.15)
       + 0.2 * Math.sin(dx * Math.PI * 1.4 - wc.phaseOffset * 0.5 + t * 0.1)
-    const localAmp = baseAmp * Math.max(0.15, ampEnvelope)
+    const localAmp = baseAmp * Math.max(0.15, ampEnvelope) * edgeZeroSmooth
 
-    // 波形：低频大弧度正弦
-    const waveY = localAmp * Math.sin(dx * Math.PI * wc.frequency + phase)
+    // ==== 流向计算 ====
+    let effectivePhase: number
+    if (wc.direction === 0) {
+      // 中途反转：左半球正向，右半球反向，中间平滑过渡
+      const blend = 0.5 + 0.5 * Math.tanh(dx * 3.5) // -1→0, 0→0.5, 1→1
+      const phaseForward = dx * Math.PI * wc.frequency + phase
+      const phaseReverse = -dx * Math.PI * wc.frequency + phase * 1.3
+      effectivePhase = phaseForward * (1 - blend) + phaseReverse * blend
+    } else {
+      effectivePhase = dx * Math.PI * wc.frequency * wc.direction + phase
+    }
 
-    // 宽度也随振幅包络变化 —— 振幅大的地方带子更宽，小的地方窄
-    const edgeFade = Math.pow(1 - dx * dx, 0.35) // 球边缘收窄
+    const waveY = localAmp * Math.sin(effectivePhase)
+
+    // 宽度也随振幅包络变化 + 边缘归零
+    const edgeFade = Math.pow(1 - dx * dx, 0.35)
     const widthEnvelope = 0.6 + 0.4 * Math.max(0, ampEnvelope)
-    const localW = baseW * edgeFade * widthEnvelope
+    const localW = baseW * edgeFade * widthEnvelope * edgeZeroSmooth
 
-    const tY = Math.min(circleHalf, Math.max(-circleHalf, waveY + localW))
-    const bY = Math.min(circleHalf, Math.max(-circleHalf, waveY - localW))
+    // ==== 中心对称：上下边沿各自有独立的波形偏移 ====
+    // 上边沿向上凸起多一点，下边沿向下凸起多一点
+    // 用额外的小幅 sin 做上下边沿的独立起伏
+    const edgeWobble = localW * 0.35 * Math.sin(dx * Math.PI * wc.frequency * 1.7 + phase * 0.6 + wc.phaseOffset * 2.0) * edgeZeroSmooth
+    const topOffset = waveY + localW + edgeWobble
+    const botOffset = waveY - localW + edgeWobble
+    // 镜像：上边沿用 +wobble，下边沿用 -wobble → 中心对称
+    const tY = Math.min(circleHalf, Math.max(-circleHalf, waveY + localW + edgeWobble))
+    const bY = Math.min(circleHalf, Math.max(-circleHalf, waveY - localW - edgeWobble))
 
     xs.push(x)
     centerYs.push(waveY)
@@ -279,15 +309,33 @@ function drawWave(
   ctx.restore()
 }
 
-// 计算某条波在 dx 处的实际 waveY（含变化振幅）
+// 计算某条波在 dx 处的实际 waveY（含变化振幅 + 边缘归零 + 方向）
 function getWaveY(wc: WaveConfig, r: number, dx: number, t: number): number {
   const baseAmp = wc.amplitude * r
   const phase = t * wc.phaseSpeed + wc.phaseOffset
+
+  const edgeClamp = dx * dx
+  const edgeZero = edgeClamp < 0.49 ? 1.0
+    : edgeClamp > 0.95 ? 0.0
+    : (0.95 - edgeClamp) / (0.95 - 0.49)
+  const edgeZeroSmooth = edgeZero * edgeZero * (3 - 2 * edgeZero)
+
   const ampEnvelope = 0.5
     + 0.3 * Math.sin(dx * Math.PI * 0.7 + wc.phaseOffset * 0.3 + t * 0.15)
     + 0.2 * Math.sin(dx * Math.PI * 1.4 - wc.phaseOffset * 0.5 + t * 0.1)
-  const localAmp = baseAmp * Math.max(0.15, ampEnvelope)
-  return localAmp * Math.sin(dx * Math.PI * wc.frequency + phase)
+  const localAmp = baseAmp * Math.max(0.15, ampEnvelope) * edgeZeroSmooth
+
+  let effectivePhase: number
+  if (wc.direction === 0) {
+    const blend = 0.5 + 0.5 * Math.tanh(dx * 3.5)
+    const phaseForward = dx * Math.PI * wc.frequency + phase
+    const phaseReverse = -dx * Math.PI * wc.frequency + phase * 1.3
+    effectivePhase = phaseForward * (1 - blend) + phaseReverse * blend
+  } else {
+    effectivePhase = dx * Math.PI * wc.frequency * wc.direction + phase
+  }
+
+  return localAmp * Math.sin(effectivePhase)
 }
 
 function drawCrossGlow(
@@ -401,13 +449,19 @@ function animate() {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
-  const elapsed = (performance.now() - startTime) / 1000
+  const now = performance.now() / 1000
+  const dt = Math.min(now - lastFrameTime, 0.05) // 限制最大帧间隔防跳变
+  lastFrameTime = now
 
-  // 平滑过渡
+  // 平滑过渡（加快收敛速度，用 dt 归一化）
   const targetSpeed = getSpeedTarget(props.status)
-  currentSpeed += (targetSpeed - currentSpeed) * 0.03
+  const lerpRate = 1 - Math.pow(0.02, dt) // ~0.15/帧 at 60fps
+  currentSpeed += (targetSpeed - currentSpeed) * lerpRate
   const targetError = props.status === 'error' ? 1.0 : 0.0
-  currentErrorMix += (targetError - currentErrorMix) * 0.05
+  currentErrorMix += (targetError - currentErrorMix) * lerpRate
+
+  // 累积时间：速度变化只影响增量，不会让整个时间轴跳变
+  accumulatedTime += dt * currentSpeed
 
   const dpr = window.devicePixelRatio || 1
   const cw = canvas.width / dpr
@@ -415,7 +469,7 @@ function animate() {
 
   ctx.save()
   ctx.scale(dpr, dpr)
-  draw(ctx, cw, ch, elapsed)
+  draw(ctx, cw, ch, accumulatedTime)
   ctx.restore()
 
   animationId = requestAnimationFrame(animate)
@@ -434,7 +488,8 @@ function setupCanvas() {
 }
 
 onMounted(() => {
-  startTime = performance.now()
+  lastFrameTime = performance.now() / 1000
+  accumulatedTime = 0
   setupCanvas()
   animate()
 })
