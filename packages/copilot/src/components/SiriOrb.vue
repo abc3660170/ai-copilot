@@ -469,22 +469,44 @@ function drawGlass(
       off.fill()
     }
 
-    // 在离屏上绘制球壳描边
+    // 在离屏上绘制球壳描边（从正面到两侧线宽渐细至消失）
     const baseEdgeA = 0.35 + 0.08 * Math.sin(t * 1.5)
-    off.beginPath()
-    off.arc(offCx, offCy, r, 0, Math.PI * 2)
-    off.strokeStyle = `rgba(${eR2 - 30}, ${eG2 - 30}, ${Math.min(255, eB2)}, ${baseEdgeA})`
-    off.lineWidth = 1.6
-    off.stroke()
+    const rimSegs = 64
+    const rimStep = (Math.PI * 2) / rimSegs
+    for (let i = 0; i < rimSegs; i++) {
+      const a0 = i * rimStep
+      const a1 = a0 + rimStep + 0.03
+      const mid = a0 + rimStep * 0.5
+      // facing: 光源正面=1, 背面=-1
+      const facing = Math.cos(mid - rotAngle)
+      if (facing <= 0) continue
+      // 线宽从正面最粗(1.8)渐变到两侧消失(0)
+      const w = 1.8 * facing * facing
+      if (w < 0.08) continue
+      off.beginPath()
+      off.arc(offCx, offCy, r, a0, a1)
+      off.strokeStyle = `rgba(${eR2 - 30}, ${eG2 - 30}, ${Math.min(255, eB2)}, ${baseEdgeA * facing})`
+      off.lineWidth = w
+      off.stroke()
+    }
 
-    // 外发光描边
-    off.shadowBlur = r * 0.12
-    off.shadowColor = `rgba(${eR}, ${eG}, ${eB}, ${baseEdgeA * 0.5})`
-    off.beginPath()
-    off.arc(offCx, offCy, r + 1.5, 0, Math.PI * 2)
-    off.strokeStyle = `rgba(${eR}, ${eG}, ${eB}, ${baseEdgeA * 0.2})`
-    off.lineWidth = 2.5
-    off.stroke()
+    // 外发光描边（同样渐变线宽）
+    for (let i = 0; i < rimSegs; i++) {
+      const a0 = i * rimStep
+      const a1 = a0 + rimStep + 0.03
+      const mid = a0 + rimStep * 0.5
+      const facing = Math.cos(mid - rotAngle)
+      if (facing <= 0) continue
+      const w = 3.0 * facing * facing
+      if (w < 0.1) continue
+      off.shadowBlur = r * 0.12 * facing
+      off.shadowColor = `rgba(${eR}, ${eG}, ${eB}, ${baseEdgeA * 0.5 * facing})`
+      off.beginPath()
+      off.arc(offCx, offCy, r + 1.5, a0, a1)
+      off.strokeStyle = `rgba(${eR}, ${eG}, ${eB}, ${baseEdgeA * 0.2 * facing})`
+      off.lineWidth = w
+      off.stroke()
+    }
     off.shadowBlur = 0
     off.shadowColor = 'transparent'
 
