@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { CopilotCore, CopilotPanel, SiriOrb } from 'copilot'
-import type { CopilotConfig, CopilotStatus } from 'copilot'
+import { type CopilotConfig, type CopilotStatus, CopilotCore, CopilotPanel, SiriOrb } from 'copilot'
 
 const config = reactive<CopilotConfig>({
   llm: {
