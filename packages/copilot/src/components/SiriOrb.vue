@@ -150,6 +150,9 @@ function draw(ctx: CanvasRenderingContext2D, w: number, h: number, time: number)
 
   // ==== 5. 玻璃球壳 ====
   drawGlass(ctx, cx, cy, br, t, errMix)
+
+  // ==== 6. 卫星光点 ====
+  drawSatellites(ctx, cx, cy, br, t)
 }
 
 function drawWave(
@@ -379,68 +382,263 @@ function drawGlass(
   cx: number, cy: number, r: number,
   t: number, errMix: number,
 ) {
-  // 菲涅尔边缘光
-  const edgeGrad = ctx.createRadialGradient(cx, cy, r * 0.78, cx, cy, r * 1.01)
-  edgeGrad.addColorStop(0, 'rgba(80, 110, 200, 0)')
-  edgeGrad.addColorStop(0.6, 'rgba(80, 110, 200, 0)')
-  edgeGrad.addColorStop(0.85, 'rgba(100, 140, 230, 0.1)')
-  edgeGrad.addColorStop(0.95, 'rgba(120, 165, 250, 0.25)')
-  edgeGrad.addColorStop(1, 'rgba(140, 185, 255, 0.4)')
-  ctx.fillStyle = edgeGrad
-  ctx.beginPath()
-  ctx.arc(cx, cy, r * 1.01, 0, Math.PI * 2)
-  ctx.fill()
+  // ---- 1. 球体明暗底色（上亮下暗，核心立体感来源） ----
+  {
+    // 从左上到右下的线性渐变，模拟顶光照射
+    const lightGrad = ctx.createLinearGradient(cx - r * 0.5, cy - r, cx + r * 0.3, cy + r)
+    lightGrad.addColorStop(0, 'rgba(60, 55, 110, 0.15)')
+    lightGrad.addColorStop(0.35, 'rgba(30, 25, 70, 0.08)')
+    lightGrad.addColorStop(0.65, 'rgba(12, 10, 40, 0.2)')
+    lightGrad.addColorStop(1, 'rgba(5, 3, 20, 0.45)')
+    ctx.fillStyle = lightGrad
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
 
-  // 球壳描边
+  // ---- 2. 内部环境反射（偏心径向，增加深度感） ----
+  {
+    const envGrad = ctx.createRadialGradient(
+      cx - r * 0.2, cy - r * 0.15, r * 0.02,
+      cx + r * 0.05, cy + r * 0.05, r,
+    )
+    envGrad.addColorStop(0, 'rgba(50, 45, 100, 0.06)')
+    envGrad.addColorStop(0.3, 'rgba(25, 22, 60, 0.03)')
+    envGrad.addColorStop(0.7, 'rgba(12, 10, 35, 0.15)')
+    envGrad.addColorStop(1, 'rgba(5, 3, 18, 0.35)')
+    ctx.fillStyle = envGrad
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // ---- 3. 菲涅尔边缘光（更强，4层叠加） ----
+  for (let layer = 0; layer < 4; layer++) {
+    const innerR = r * (0.65 + layer * 0.07)
+    const outerR = r * (1.0 + layer * 0.004)
+    const alpha = [0.45, 0.3, 0.18, 0.08][layer]
+    const edgeGrad = ctx.createRadialGradient(cx, cy, innerR, cx, cy, outerR)
+    edgeGrad.addColorStop(0, 'rgba(100, 150, 240, 0)')
+    edgeGrad.addColorStop(0.4, `rgba(110, 160, 245, ${alpha * 0.08})`)
+    edgeGrad.addColorStop(0.7, `rgba(130, 180, 255, ${alpha * 0.35})`)
+    edgeGrad.addColorStop(0.88, `rgba(160, 200, 255, ${alpha * 0.8})`)
+    edgeGrad.addColorStop(0.96, `rgba(180, 215, 255, ${alpha})`)
+    edgeGrad.addColorStop(1, `rgba(190, 220, 255, ${alpha * 0.5})`)
+    ctx.fillStyle = edgeGrad
+    ctx.beginPath()
+    ctx.arc(cx, cy, outerR, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // ---- 4. 球壳描边（双层） ----
   const edgeA = 0.35 + 0.08 * Math.sin(t * 1.5)
   ctx.beginPath()
   ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.strokeStyle = `rgba(120, 155, 235, ${edgeA})`
-  ctx.lineWidth = 1.5
+  ctx.strokeStyle = `rgba(150, 185, 250, ${edgeA})`
+  ctx.lineWidth = 1.4
   ctx.stroke()
 
-  // 外光圈
+  // 外发光描边
+  ctx.save()
+  ctx.shadowBlur = r * 0.12
+  ctx.shadowColor = `rgba(110, 150, 240, ${edgeA * 0.5})`
   ctx.beginPath()
-  ctx.arc(cx, cy, r + 2, 0, Math.PI * 2)
-  ctx.strokeStyle = `rgba(90, 120, 200, ${edgeA * 0.2})`
+  ctx.arc(cx, cy, r + 1.5, 0, Math.PI * 2)
+  ctx.strokeStyle = `rgba(110, 150, 240, ${edgeA * 0.2})`
   ctx.lineWidth = 2.5
   ctx.stroke()
+  ctx.restore()
 
-  // 左上高光
-  const hlX = cx - r * 0.3
-  const hlY = cy - r * 0.33
-  const hlGrad = ctx.createRadialGradient(hlX, hlY, 0, hlX, hlY, r * 0.38)
-  hlGrad.addColorStop(0, 'rgba(255, 255, 255, 0.5)')
-  hlGrad.addColorStop(0.25, 'rgba(255, 255, 255, 0.18)')
-  hlGrad.addColorStop(0.6, 'rgba(255, 255, 255, 0.03)')
-  hlGrad.addColorStop(1, 'rgba(255, 255, 255, 0)')
-  ctx.fillStyle = hlGrad
-  ctx.beginPath()
-  ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.fill()
+  // ---- 5. 主高光（左上，椭圆，更亮更锐利） ----
+  {
+    const hlCx = cx - r * 0.26
+    const hlCy = cy - r * 0.28
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.clip()
 
-  // 右下小高光
-  const hl2X = cx + r * 0.38
-  const hl2Y = cy + r * 0.32
-  const hl2Grad = ctx.createRadialGradient(hl2X, hl2Y, 0, hl2X, hl2Y, r * 0.12)
-  hl2Grad.addColorStop(0, 'rgba(200, 215, 255, 0.35)')
-  hl2Grad.addColorStop(0.5, 'rgba(200, 215, 255, 0.08)')
-  hl2Grad.addColorStop(1, 'rgba(200, 215, 255, 0)')
-  ctx.fillStyle = hl2Grad
-  ctx.beginPath()
-  ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.fill()
+    // 大范围柔和光
+    ctx.save()
+    ctx.translate(hlCx, hlCy)
+    ctx.rotate(-0.45)
+    ctx.scale(1, 0.55)
+    const hlSoftGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 0.5)
+    hlSoftGrad.addColorStop(0, 'rgba(255, 255, 255, 0.35)')
+    hlSoftGrad.addColorStop(0.3, 'rgba(230, 240, 255, 0.15)')
+    hlSoftGrad.addColorStop(0.6, 'rgba(200, 220, 255, 0.04)')
+    hlSoftGrad.addColorStop(1, 'rgba(200, 220, 255, 0)')
+    ctx.fillStyle = hlSoftGrad
+    ctx.fillRect(-r * 0.6, -r * 0.6, r * 1.2, r * 1.2)
+    ctx.restore()
 
-  // 底部品红反射
-  const btGrad = ctx.createRadialGradient(cx, cy + r * 0.5, 0, cx, cy + r * 0.5, r * 0.45)
-  const btC = errMix > 0.5 ? '255, 70, 40' : '190, 40, 170'
-  btGrad.addColorStop(0, `rgba(${btC}, 0.18)`)
-  btGrad.addColorStop(0.5, `rgba(${btC}, 0.05)`)
-  btGrad.addColorStop(1, `rgba(${btC}, 0)`)
-  ctx.fillStyle = btGrad
-  ctx.beginPath()
-  ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.fill()
+    // 锐利核心光斑
+    ctx.save()
+    ctx.translate(hlCx + r * 0.02, hlCy + r * 0.02)
+    ctx.rotate(-0.5)
+    ctx.scale(1, 0.45)
+    const hlSharpGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 0.18)
+    hlSharpGrad.addColorStop(0, 'rgba(255, 255, 255, 0.9)')
+    hlSharpGrad.addColorStop(0.2, 'rgba(255, 255, 255, 0.6)')
+    hlSharpGrad.addColorStop(0.5, 'rgba(240, 248, 255, 0.2)')
+    hlSharpGrad.addColorStop(1, 'rgba(220, 235, 255, 0)')
+    ctx.fillStyle = hlSharpGrad
+    ctx.fillRect(-r * 0.3, -r * 0.3, r * 0.6, r * 0.6)
+    ctx.restore()
+
+    ctx.restore()
+  }
+
+  // ---- 6. 副高光（右下小光点，更亮） ----
+  {
+    const hl2X = cx + r * 0.33
+    const hl2Y = cy + r * 0.26
+    const hl2Grad = ctx.createRadialGradient(hl2X, hl2Y, 0, hl2X, hl2Y, r * 0.09)
+    hl2Grad.addColorStop(0, 'rgba(240, 245, 255, 0.65)')
+    hl2Grad.addColorStop(0.3, 'rgba(220, 230, 255, 0.3)')
+    hl2Grad.addColorStop(0.7, 'rgba(200, 215, 255, 0.06)')
+    hl2Grad.addColorStop(1, 'rgba(200, 215, 255, 0)')
+    ctx.fillStyle = hl2Grad
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // ---- 7. 下半部暗影加深（增强球体体积感） ----
+  {
+    const shadowGrad = ctx.createLinearGradient(cx, cy, cx, cy + r)
+    shadowGrad.addColorStop(0, 'rgba(5, 3, 20, 0)')
+    shadowGrad.addColorStop(0.3, 'rgba(5, 3, 20, 0.05)')
+    shadowGrad.addColorStop(0.7, 'rgba(5, 3, 20, 0.15)')
+    shadowGrad.addColorStop(1, 'rgba(3, 2, 12, 0.25)')
+    ctx.fillStyle = shadowGrad
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // ---- 8. 下半部反射光（品红/青色淡反射） ----
+  {
+    const btGrad = ctx.createRadialGradient(cx + r * 0.05, cy + r * 0.45, 0, cx, cy + r * 0.4, r * 0.5)
+    const btC = errMix > 0.5 ? '255, 70, 40' : '180, 50, 180'
+    btGrad.addColorStop(0, `rgba(${btC}, 0.15)`)
+    btGrad.addColorStop(0.4, `rgba(${btC}, 0.05)`)
+    btGrad.addColorStop(1, `rgba(${btC}, 0)`)
+    ctx.fillStyle = btGrad
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // ---- 9. 底部环境光反射（淡青） ----
+  {
+    const btGrad2 = ctx.createRadialGradient(cx - r * 0.1, cy + r * 0.35, 0, cx, cy + r * 0.3, r * 0.35)
+    btGrad2.addColorStop(0, 'rgba(60, 140, 220, 0.1)')
+    btGrad2.addColorStop(0.5, 'rgba(60, 120, 200, 0.04)')
+    btGrad2.addColorStop(1, 'rgba(60, 120, 200, 0)')
+    ctx.fillStyle = btGrad2
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // ---- 10. 上部弧形反光（模拟环境光映射） ----
+  {
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.clip()
+
+    ctx.globalAlpha = 0.09 + 0.03 * Math.sin(t * 0.8)
+    const arcGrad = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy - r * 0.3)
+    arcGrad.addColorStop(0, 'rgba(180, 200, 255, 0)')
+    arcGrad.addColorStop(0.25, 'rgba(200, 215, 255, 0.4)')
+    arcGrad.addColorStop(0.5, 'rgba(220, 230, 255, 0.9)')
+    arcGrad.addColorStop(0.75, 'rgba(200, 215, 255, 0.4)')
+    arcGrad.addColorStop(1, 'rgba(180, 200, 255, 0)')
+
+    ctx.strokeStyle = arcGrad
+    ctx.lineWidth = r * 0.05
+    ctx.beginPath()
+    ctx.arc(cx, cy, r * 0.88, -Math.PI * 0.82, -Math.PI * 0.18)
+    ctx.stroke()
+
+    // 第二条弧（更细更淡，下方）
+    ctx.globalAlpha = 0.04 + 0.015 * Math.sin(t * 0.6 + 1)
+    ctx.lineWidth = r * 0.03
+    ctx.beginPath()
+    ctx.arc(cx, cy, r * 0.78, -Math.PI * 0.7, -Math.PI * 0.3)
+    ctx.stroke()
+
+    ctx.restore()
+  }
+}
+
+// ---- 卫星光点 ----
+const SATELLITES = [
+  { orbitRadius: 1.04, speed: 1.1, tilt: 0.35, phase: 0, size: 0.055 },
+  { orbitRadius: 1.05, speed: -0.9, tilt: -0.6, phase: Math.PI * 0.7, size: 0.048 },
+  { orbitRadius: 1.03, speed: 0.75, tilt: 1.2, phase: Math.PI * 1.4, size: 0.04 },
+]
+
+function drawSatellites(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, r: number,
+  t: number,
+) {
+  for (const sat of SATELLITES) {
+    const angle = t * sat.speed + sat.phase
+    const orbitR = r * sat.orbitRadius
+
+    // 3D 投影：圆形轨道绕一个倾斜轴
+    const cosA = Math.cos(angle)
+    const sinA = Math.sin(angle)
+    const cosT = Math.cos(sat.tilt)
+    const sinT = Math.sin(sat.tilt)
+
+    // 旋转后的 3D 坐标
+    const x3d = orbitR * cosA
+    const y3d = orbitR * sinA * cosT
+    const z3d = orbitR * sinA * sinT // z>0 表示在前面
+
+    const sx = cx + x3d
+    const sy = cy + y3d
+
+    // 根据 z 调整大小和亮度（远小近大）
+    const depthFactor = 0.6 + 0.4 * (z3d / orbitR + 1) / 2 // 0.6~1.0
+    const dotR = r * sat.size * depthFactor
+    const alpha = 0.5 + 0.5 * depthFactor
+
+    // 在球体背后时变暗
+    const behindSphere = z3d < 0 && Math.sqrt(x3d * x3d + y3d * y3d) < r * 0.92
+    const finalAlpha = behindSphere ? alpha * 0.15 : alpha
+
+    // 光点辉光
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    const glowGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, dotR * 5)
+    glowGrad.addColorStop(0, `rgba(220, 230, 255, ${finalAlpha * 0.7})`)
+    glowGrad.addColorStop(0.2, `rgba(190, 210, 255, ${finalAlpha * 0.35})`)
+    glowGrad.addColorStop(0.5, `rgba(160, 180, 250, ${finalAlpha * 0.1})`)
+    glowGrad.addColorStop(1, 'rgba(140, 160, 240, 0)')
+    ctx.fillStyle = glowGrad
+    ctx.fillRect(sx - dotR * 5, sy - dotR * 5, dotR * 10, dotR * 10)
+    ctx.restore()
+
+    // 光点实体
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    const dotGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, dotR)
+    dotGrad.addColorStop(0, `rgba(255, 255, 255, ${finalAlpha})`)
+    dotGrad.addColorStop(0.2, `rgba(245, 250, 255, ${finalAlpha * 0.9})`)
+    dotGrad.addColorStop(0.5, `rgba(210, 225, 255, ${finalAlpha * 0.4})`)
+    dotGrad.addColorStop(1, 'rgba(170, 195, 250, 0)')
+    ctx.fillStyle = dotGrad
+    ctx.beginPath()
+    ctx.arc(sx, sy, dotR, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }
 }
 
 function animate() {
@@ -480,7 +678,7 @@ function setupCanvas() {
   if (!canvas) return
 
   const dpr = window.devicePixelRatio || 1
-  const displaySize = props.size * 1.3
+  const displaySize = props.size * 1.6
   canvas.width = Math.round(displaySize * dpr)
   canvas.height = Math.round(displaySize * dpr)
   canvas.style.width = `${displaySize}px`
