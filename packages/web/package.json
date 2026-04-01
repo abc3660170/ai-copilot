@@ -11,13 +11,15 @@
   },
   "dependencies": {
     "copilot": "workspace:*",
-    "vue": "^3.5.30"
+    "vue": "^3.5.30",
+    "vue-router": "^5.0.4"
   },
   "devDependencies": {
     "@tsconfig/node22": "^22.0.5",
     "@types/node": "^25.5.0",
     "@vitejs/plugin-vue": "^6.0.4",
     "@vue/tsconfig": "^0.9.1",
+    "sass": "^1.98.0",
     "typescript": "^6.0.2",
     "vite": "^7.3.1",
     "vite-plugin-vue-devtools": "^8.0.7",

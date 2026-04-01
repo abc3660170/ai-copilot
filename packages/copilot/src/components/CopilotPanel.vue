@@ -4,6 +4,7 @@ import type { Message, CopilotStatus } from '../types'
 import { CopilotCore } from '../core'
 import MessageBubble from './MessageBubble.vue'
 import CopilotInput from './CopilotInput.vue'
+import SiriOrb from './SiriOrb.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -87,19 +88,18 @@ onUnmounted(() => {
 
 <template>
   <div class="copilot-wrapper">
-    <!-- 浮动按钮 -->
-    <button
+    <!-- Siri 风格光球按钮 -->
+    <div
       v-if="!isOpen"
-      class="copilot-fab"
+      class="copilot-orb-wrapper"
       @click="togglePanel"
+      role="button"
+      tabindex="0"
       aria-label="打开 AI 助手"
+      @keydown.enter="togglePanel"
     >
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2Z" fill="currentColor" opacity="0.2"/>
-        <path d="M12 6L12 18M18 12L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
-        <path d="M9 9L15 9M9 12L13 12M9 15L11 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-    </button>
+      <SiriOrb :status="status" />
+    </div>
 
     <!-- 面板 -->
     <Transition name="copilot-slide">
@@ -158,25 +158,16 @@ onUnmounted(() => {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* 浮动按钮 */
-.copilot-fab {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  border: none;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: white;
+/* ============ Siri 光球 ============ */
+.copilot-orb-wrapper {
   cursor: pointer;
+  position: relative;
+  width: 96px;
+  height: 96px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.copilot-fab:hover {
-  transform: scale(1.08);
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+  outline: none;
 }
 
 /* 面板 */
