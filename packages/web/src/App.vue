@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 
-const router = useRouter()
-const route = useRoute()
-const sidebarOpen = ref(true)
+const router = useRouter();
+const route = useRoute();
+const sidebarOpen = ref(true);
 
 const navItems = [
   { path: '/', name: 'playground', label: '🚀 Playground', desc: 'Copilot 调试' },
   { path: '/materials', name: 'materials', label: '📦 素材收集', desc: '设计开发素材' },
-]
+];
 
 function navigateTo(path: string) {
-  router.push(path)
+  router.push(path);
 }
 </script>
 
@@ -25,8 +25,20 @@ function navigateTo(path: string) {
           <span class="brand-icon">🤖</span>
           <span class="brand-text">AI Copilot</span>
         </div>
-        <button class="sidebar-toggle" @click="sidebarOpen = !sidebarOpen" :title="sidebarOpen ? '收起' : '展开'">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <button
+          class="sidebar-toggle"
+          @click="sidebarOpen = !sidebarOpen"
+          :title="sidebarOpen ? '收起' : '展开'"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
             <path v-if="sidebarOpen" d="M15 18l-6-6 6-6" />
             <path v-else d="M9 18l6-6-6-6" />
           </svg>
@@ -77,7 +89,9 @@ function navigateTo(path: string) {
   backdrop-filter: blur(20px);
   display: flex;
   flex-direction: column;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   position: sticky;
   top: 0;
@@ -135,7 +149,9 @@ function navigateTo(path: string) {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 
 .sidebar-toggle:hover {
@@ -222,9 +238,7 @@ function navigateTo(path: string) {
 /* ---- 主内容 ---- */
 .main-content {
   flex: 1;
-  padding: 40px 32px;
   overflow-y: auto;
   min-width: 0;
 }
 </style>
-

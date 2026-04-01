@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+.turbo
+.cache
+.vite
+.idea
+.husky
+.DS_Store
+coverage
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+.vscode

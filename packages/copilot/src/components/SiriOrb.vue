@@ -393,7 +393,7 @@ function drawGlass(
   const eB2 = Math.round(255 - 175 * errMix)  // 255→80
 
   // 光源旋转角度（匀速）
-  const rotAngle = t * 0.4
+  const rotAngle = t * 1
   const cosRot = Math.cos(rotAngle)
   const sinRot = Math.sin(rotAngle)
 
